@@ -97,7 +97,7 @@ static int diskfile_recv(struct iperf_stream *sp);
 static int JSON_write(int fd, cJSON *json);
 static void print_interval_results(struct iperf_test *test, struct iperf_stream *sp, cJSON *json_interval_streams);
 static cJSON *JSON_read(int fd);
-
+static void iperf_dump_json(struct iperf_test *test, const char* title, cJSON* item);
 
 /*************************** Print usage functions ****************************/
 
@@ -672,6 +672,9 @@ iperf_on_test_start(struct iperf_test *test)
 {
     if (test->json_output) {
 	cJSON_AddItemToObject(test->json_start, "test_start", iperf_json_printf("protocol: %s  num_streams: %d  blksize: %d  omit: %d  duration: %d  bytes: %d  blocks: %d  reverse: %d  tos: %d", test->protocol->name, (int64_t) test->num_streams, (int64_t) test->settings->blksize, (int64_t) test->omit, (int64_t) test->duration, (int64_t) test->settings->bytes, (int64_t) test->settings->blocks, test->reverse?(int64_t)1:(int64_t)0, (int64_t) test->settings->tos));
+        if (test->json_output == 2) {
+            iperf_dump_json(test, "start", test->json_start);
+        }
     } else {
 	if (test->verbose) {
 	    if (test->settings->bytes)
@@ -793,6 +796,7 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
         {"one-off", no_argument, NULL, '1'},
         {"verbose", no_argument, NULL, 'V'},
         {"json", no_argument, NULL, 'J'},
+        {"json-immediate", no_argument, NULL, 'j'},
         {"version", no_argument, NULL, 'v'},
         {"server", no_argument, NULL, 's'},
         {"client", required_argument, NULL, 'c'},
@@ -873,7 +877,7 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
     char *client_username = NULL, *client_rsa_public_key = NULL, *server_rsa_private_key = NULL;
 #endif /* HAVE_SSL */
 
-    while ((flag = getopt_long(argc, argv, "p:f:i:D1VJvsc:ub:t:n:k:l:P:Rw:B:M:N46S:L:ZO:F:A:T:C:dI:hX:", longopts, NULL)) != -1) {
+    while ((flag = getopt_long(argc, argv, "p:f:i:D1VJjvsc:ub:t:n:k:l:P:Rw:B:M:N46S:L:ZO:F:A:T:C:dI:hX:", longopts, NULL)) != -1) {
         switch (flag) {
             case 'p':
 		portno = atoi(optarg);
@@ -926,6 +930,9 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
                 break;
             case 'J':
                 test->json_output = 1;
+                break;
+            case 'j':
+                test->json_output = 2;
                 break;
             case 'v':
                 printf("%s (cJSON %s)\n%s\n%s\n", version, cJSON_Version(), get_system_info(),
@@ -2953,6 +2960,10 @@ iperf_print_intermediate(struct iperf_test *test)
             }
         }
     }
+
+    if (test->json_output == 2) {
+        iperf_dump_json(test, "interval", json_interval);
+    }
 }
 
 /**
@@ -3440,6 +3451,10 @@ iperf_print_results(struct iperf_test *test)
                 }
             }
         }
+    }
+
+    if (test->json_output == 2) {
+        iperf_dump_json(test, "end", test->json_end);
     }
 
     /* Set real sender_has_retransmits for current side */
@@ -4146,6 +4161,16 @@ iperf_printf(struct iperf_test *test, const char* format, ...)
 	}
     }
     return r;
+}
+
+static void iperf_dump_json(struct iperf_test *test, const char* title, cJSON* item)
+{
+    cJSON* o = cJSON_CreateObject();
+    cJSON_AddItemToObject(o, title, item);
+    char* str = cJSON_PrintUnformatted(o);
+    fprintf(test->outfile, "%s\n", str);
+    iflush(test);
+    free(str);
 }
 
 int
