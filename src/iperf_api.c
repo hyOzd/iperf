@@ -2827,7 +2827,6 @@ iperf_print_intermediate(struct iperf_test *test)
         json_interval = cJSON_CreateObject();
 	if (json_interval == NULL)
 	    return;
-	cJSON_AddItemToArray(test->json_intervals, json_interval);
         json_interval_streams = cJSON_CreateArray();
 	if (json_interval_streams == NULL)
 	    return;
@@ -2961,8 +2960,11 @@ iperf_print_intermediate(struct iperf_test *test)
         }
     }
 
-    if (test->json_output == 2) {
+    if (test->json_output == 1) {
+        cJSON_AddItemToArray(test->json_intervals, json_interval);
+    } else if (test->json_output == 2) {
         iperf_dump_json(test, "interval", json_interval);
+        cJSON_Delete(json_interval);
     }
 }
 
@@ -4024,11 +4026,13 @@ iperf_json_finish(struct iperf_test *test)
     if (test->server_output_text) {
 	cJSON_AddStringToObject(test->json_top, "server_output_text", test->server_output_text);
     }
-    test->json_output_string = cJSON_Print(test->json_top);
-    if (test->json_output_string == NULL)
-        return -1;
-    fprintf(test->outfile, "%s\n", test->json_output_string);
-    iflush(test);
+    if (test->json_output == 1) {
+        test->json_output_string = cJSON_Print(test->json_top);
+        if (test->json_output_string == NULL)
+            return -1;
+        fprintf(test->outfile, "%s\n", test->json_output_string);
+        iflush(test);
+    }
     cJSON_Delete(test->json_top);
     test->json_top = test->json_start = test->json_connected = test->json_intervals = test->json_server_output = test->json_end = NULL;
     return 0;
